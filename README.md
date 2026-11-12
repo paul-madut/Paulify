@@ -1,0 +1,84 @@
+# Paulify
+
+A small music streaming service for a 2014 BlackBerry Classic.
+
+## Why this exists
+
+Streaming music to a BlackBerry Classic in 2026 is a constraint problem, not a features problem.
+The device runs BB10 10.3.3 with a 2014 WebKit browser, 2 GB of RAM, a 720x720 screen, and no Media Source Extensions.
+That rules out HLS.js, DASH.js, and every modern streaming stack that assumes MSE.
+Whatever plays on it has to be progressive audio fetched over plain HTTP/1.1 with byte-range requests.
+
+The client is a sideloaded app.
+The backend is where the interesting work sits: a private object store, a CDN that signs every playback URL, and a catalog that returns fast on a device that cannot afford a slow first byte.
+
+## Status
+
+Build in progress, started 2026-11-12.
+Backend infrastructure and API are the current focus.
+Client packaging and sideloading come after playback is proven in the device browser.
+
+Nothing here is deployed to a public endpoint yet.
+
+## Architecture
+
+```
+BlackBerry Classic (BB10, sideloaded)
+   |
+   |  1. GET /tracks?q=        (catalog: title, artist, duration)
+   |  2. GET /tracks/{id}/play (signed playback URL, ~10 min TTL)
+   v
+API Gateway (HTTP API) -> Lambda (TypeScript, Node 22)
+   |                          |
+   |                          +-> DynamoDB (catalog, single table + GSIs)
+   |                          +-> CloudFront signer (key group)
+   |
+   |  3. GET <signed CloudFront URL> with Range header
+   v
+CloudFront (OAC, ACM cert) -> private S3 bucket (audio, immutable cache headers)
+```
+
+Playback is progressive MP3 with byte-range seeking.
+CloudFront is the only public entry point for audio; the bucket has no public access and is reachable only through Origin Access Control.
+
+## AWS services and why each one
+
+| Service | Role | Why it is here |
+|---|---|---|
+| S3 | Audio origin | Private bucket, no public objects, versioning on, lifecycle rule for old masters |
+| CloudFront | Streaming edge | Signed URLs via key group, byte-range support, HTTP/1.1 for the old client, ACM cert because BB10's CA store predates Let's Encrypt |
+| Lambda | Read path | Catalogue queries and URL minting, no servers to keep warm |
+| API Gateway (HTTP API) | Front door | Cheapest API type, request throttling per device |
+| DynamoDB | Catalog | Single table with GSIs for artist and title lookup, on-demand billing |
+| CloudWatch | Operations | Structured logs, error alarms, Lambda duration and API 5xx metrics |
+| IAM | Access | Least privilege per function, no wildcard resources |
+| CDK (TypeScript) | Infrastructure as code | Whole stack is reproducible from one `cdk deploy` |
+
+The backend uses the AWS SDK for JavaScript v3 (`@aws-sdk/client-s3`, `@aws-sdk/lib-dynamodb`, `@aws-sdk/s3-request-presigner`, `@aws-sdk/cloudfront-signer`).
+
+Estimated running cost for one user is near zero: Lambda and CloudFront free tiers, DynamoDB on-demand on a catalog of thousands of items, and a few hundred megabytes of egress.
+
+## Device constraints that drove the design
+
+- **No Media Source Extensions.** Progressive download only, so seeking depends entirely on HTTP range requests and 206 responses from CloudFront.
+- **Old TLS and CA trust store.** Certificates come from ACM through CloudFront rather than a free CA whose root may postdate the device.
+- **CBR MP3 at 128 kbps.** Variable bitrate makes seeking land at approximate offsets; constant bitrate keeps it predictable.
+- **Tiny screen.** The client UI is a single list and a transport bar, no scrolling artwork, no animation.
+- **No credentials on the device.** The client never holds AWS keys; it only receives short-lived signed URLs from the API.
+
+## De-risking order
+
+Validate in the BlackBerry browser before fighting the sideload toolchain.
+A plain HTML page that lists tracks and plays one over CloudFront proves codecs, TLS, range seeking, and layout on the real screen in minutes.
+Only then is it worth packaging as a WebWorks `.bar` (preferred) or falling back to a minimal Android APK for the BB10 Android runtime, which is capped at API 18.
+
+See `docs/plan.md` for the build order and `docs/architecture.md` for the data model and request flow.
+
+## Repository layout
+
+```
+infra/     AWS CDK app (TypeScript)
+api/       Lambda handlers (TypeScript)
+client/    BB10 client (ES5, no framework)
+docs/      Architecture and plan
+```
