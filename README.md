@@ -14,8 +14,20 @@ The backend is where the interesting work sits: a private object store, a CDN th
 
 ## Status
 
-Backend scaffolded and verified locally on 2026-11-12: `npm run typecheck` clean, 7 unit tests passing, `cdk synth` producing a complete stack.
-Nothing is deployed yet, and the client is not written.
+Deployed to AWS and verified end to end on 2026-11-12, in `ca-central-1`.
+
+| Check | Result |
+|---|---|
+| `GET /tracks` | 200, returns the seeded catalogue |
+| `GET /tracks?q=test` | 200, title prefix match via GSI2 |
+| `GET /tracks/{id}/play` | 200, signed CloudFront URL with `Expires`, `Key-Pair-Id`, `Signature` |
+| Signed URL fetch | 200, `audio/mpeg`, `accept-ranges: bytes`, immutable cache header |
+| `Range: bytes=100000-100999` | 206, `content-range: bytes 100000-100999/481114` |
+| Signed URL with signature stripped | 403 |
+| Direct S3 object request | 403 |
+
+The client is not written yet.
+Next step is proving playback in the BlackBerry browser before packaging, per `docs/plan.md`.
 
 ## Deploy
 
