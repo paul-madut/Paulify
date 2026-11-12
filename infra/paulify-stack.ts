@@ -5,6 +5,7 @@ import * as cdk from 'aws-cdk-lib';
 import { Duration, RemovalPolicy } from 'aws-cdk-lib';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
+import * as budgets from 'aws-cdk-lib/aws-budgets';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
@@ -217,6 +218,31 @@ export class PaulifyStack extends cdk.Stack {
         alarm.addAlarmAction(new actions.SnsAction(topic));
       }
     }
+
+    // ---------------------------------------------------------------------
+    // Cost guardrail. A CDN mistake bills by the gigabyte, so the ceiling is
+    // low and loud rather than discovered at the end of the month.
+    // ---------------------------------------------------------------------
+    new budgets.CfnBudget(this, 'MonthlyBudget', {
+      budget: {
+        budgetType: 'COST',
+        timeUnit: 'MONTHLY',
+        budgetLimit: { amount: 5, unit: 'USD' },
+      },
+      notificationsWithSubscribers: alarmEmail
+        ? [
+            {
+              notification: {
+                notificationType: 'ACTUAL',
+                comparisonOperator: 'GREATER_THAN',
+                threshold: 80,
+                thresholdType: 'PERCENTAGE',
+              },
+              subscribers: [{ subscriptionType: 'EMAIL', address: String(alarmEmail) }],
+            },
+          ]
+        : [],
+    });
 
     new cdk.CfnOutput(this, 'ApiUrl', { value: api.apiEndpoint });
     new cdk.CfnOutput(this, 'DistributionDomain', {
