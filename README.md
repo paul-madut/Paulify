@@ -14,11 +14,28 @@ The backend is where the interesting work sits: a private object store, a CDN th
 
 ## Status
 
-Build in progress, started 2026-11-12.
-Backend infrastructure and API are the current focus.
-Client packaging and sideloading come after playback is proven in the device browser.
+Backend scaffolded and verified locally on 2026-11-12: `npm run typecheck` clean, 7 unit tests passing, `cdk synth` producing a complete stack.
+Nothing is deployed yet, and the client is not written.
 
-Nothing here is deployed to a public endpoint yet.
+## Deploy
+
+```bash
+npm install
+npm run keys                                  # generates infra/keys/ (gitignored)
+npx cdk bootstrap                             # once per account and region
+npx cdk deploy
+
+# put the private half of the signing key into Secrets Manager
+aws secretsmanager put-secret-value \
+  --secret-id paulify/cloudfront-private-key \
+  --secret-string file://infra/keys/cloudfront_private_key.pem
+```
+
+Optional alarm email:
+
+```bash
+npx cdk deploy -c alarmEmail=you@example.com
+```
 
 ## Architecture
 
@@ -54,7 +71,7 @@ CloudFront is the only public entry point for audio; the bucket has no public ac
 | IAM | Access | Least privilege per function, no wildcard resources |
 | CDK (TypeScript) | Infrastructure as code | Whole stack is reproducible from one `cdk deploy` |
 
-The backend uses the AWS SDK for JavaScript v3 (`@aws-sdk/client-s3`, `@aws-sdk/lib-dynamodb`, `@aws-sdk/s3-request-presigner`, `@aws-sdk/cloudfront-signer`).
+The backend uses the AWS SDK for JavaScript v3 (`@aws-sdk/client-s3`, `@aws-sdk/lib-dynamodb`, `@aws-sdk/client-secrets-manager`, `@aws-sdk/cloudfront-signer`).
 
 Estimated running cost for one user is near zero: Lambda and CloudFront free tiers, DynamoDB on-demand on a catalog of thousands of items, and a few hundred megabytes of egress.
 

@@ -1,0 +1,46 @@
+{
+  "name": "paulify",
+  "version": "0.1.0",
+  "description": "Music streaming for a BlackBerry Classic",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "keys": "node scripts/gen-keys.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "synth": "cdk synth",
+    "deploy": "cdk deploy",
+    "seed": "tsx scripts/seed.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paul-madut/Paulify.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/paul-madut/Paulify/issues"
+  },
+  "homepage": "https://github.com/paul-madut/Paulify#readme",
+  "private": true,
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1167.0",
+    "@aws-sdk/client-secrets-manager": "^3.1167.0",
+    "@aws-sdk/cloudfront-signer": "^3.1166.0",
+    "@aws-sdk/lib-dynamodb": "^3.1167.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "aws-cdk": "^2.1148.1",
+    "aws-cdk-lib": "^2.276.0",
+    "aws-sdk-client-mock": "^4.1.0",
+    "constructs": "^10.8.1",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}
