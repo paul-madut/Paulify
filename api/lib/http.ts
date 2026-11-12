@@ -9,6 +9,8 @@ export interface ApiResponse {
 const BASE_HEADERS: Record<string, string> = {
   'content-type': 'application/json',
   'cache-control': 'no-store',
+  // The device client and any local test page read this API from another origin.
+  'access-control-allow-origin': '*',
 };
 
 export function json(statusCode: number, body: unknown): ApiResponse {
