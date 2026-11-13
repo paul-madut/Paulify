@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paulify Admin</title>
+<style>
+  :root {
+    --bg: #121212;
+    --panel: #181818;
+    --panel-hover: #282828;
+    --line: #2a2a2a;
+    --text: #ffffff;
+    --muted: #a7a7a7;
+    --green: #1db954;
+    --red: #e22134;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Helvetica Neue", Inter, Arial, sans-serif;
+    font-size: 14px;
+    padding-bottom: 60px;
+  }
+  header {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px;
+    background: linear-gradient(180deg, #1f1f1f, #121212);
+    border-bottom: 1px solid var(--line);
+  }
+  h1 { font-size: 18px; margin: 0; letter-spacing: -0.2px; }
+  h1 span { color: var(--green); }
+  .brand { font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: var(--muted); }
+  main { max-width: 940px; margin: 0 auto; padding: 22px 20px; }
+  section { background: var(--panel); border-radius: 10px; padding: 18px; margin-bottom: 20px; }
+  h2 { font-size: 15px; margin: 0 0 14px 0; font-weight: 600; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  input[type=text], input[type=number] {
+    width: 100%; padding: 9px 10px; border-radius: 5px;
+    border: 1px solid var(--line); background: #101010; color: var(--text); font-size: 14px;
+  }
+  input:focus { outline: none; border-color: #4a4a4a; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .row > div { flex: 1 1 180px; }
+  .checkbox { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; margin-top: 18px; }
+  .drop {
+    border: 1px dashed #3a3a3a; border-radius: 8px; padding: 26px 14px;
+    text-align: center; color: var(--muted); cursor: pointer; transition: 120ms;
+    background: #141414;
+  }
+  .drop.over { border-color: var(--green); color: var(--text); background: #172017; }
+  button {
+    font-family: inherit; font-size: 14px; font-weight: 600;
+    border: none; border-radius: 999px; padding: 11px 22px; cursor: pointer;
+    background: var(--green); color: #000;
+  }
+  button:disabled { opacity: .45; cursor: default; }
+  button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); font-weight: 500; padding: 6px 12px; font-size: 12px; }
+  .cover-preview { width: 108px; height: 108px; border-radius: 6px; object-fit: cover; background: #101010; }
+  .cover-preview.empty { display: flex; align-items: center; justify-content: center; color: #4a4a4a; font-size: 11px; text-align: center; }
+  ul.files { list-style: none; margin: 14px 0 0; padding: 0; }
+  ul.files li {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 10px; border-radius: 6px; background: #141414; margin-bottom: 6px;
+  }
+  ul.files li .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  ul.files li .dur { color: var(--muted); font-size: 12px; min-width: 44px; text-align: right; }
+  ul.files li .state { font-size: 11px; color: var(--muted); min-width: 60px; text-align: right; }
+  ul.files li.done .state { color: var(--green); }
+  ul.files li.err .state { color: var(--red); }
+  .arrow { background: #222; color: #ccc; border-radius: 4px; border: 1px solid #333; padding: 2px 7px; font-size: 11px; cursor: pointer; }
+  #log { font-family: Menlo, monospace; font-size: 11px; color: #9fb3c8; white-space: pre-wrap; max-height: 180px; overflow: auto; background: #0d0d0d; border-radius: 6px; padding: 10px; margin-top: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 14px; }
+  .card { background: #141414; border-radius: 8px; padding: 10px; }
+  .card img, .card .placeholder { width: 100%; aspect-ratio: 1/1; border-radius: 6px; object-fit: cover; background: #222; display: block; }
+  .card .t { font-size: 13px; font-weight: 600; margin-top: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .a { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge { display: inline-block; font-size: 10px; text-transform: uppercase; letter-spacing: .6px; border: 1px solid #3a3a3a; color: var(--muted); border-radius: 3px; padding: 1px 5px; margin-left: 6px; }
+  .keybar { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .keybar input { width: 210px; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 24px; background: #1f1f1f; border: 1px solid var(--line); padding: 12px 18px; border-radius: 8px; font-size: 13px; display: none; }
+  .toast.show { display: block; }
+  .toast.err { border-color: var(--red); color: #ffb4bb; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="brand">Paulify</div>
+    <h1>Admin <span>panel</span></h1>
+  </div>
+  <div class="keybar">
+    <input type="password" id="key" placeholder="admin key">
+    <button class="ghost" id="savekey">save</button>
+  </div>
+</header>
+
+<main>
+  <section>
+    <h2>New release</h2>
+
+    <div class="row" style="margin-bottom:14px">
+      <div>
+        <label>Cover art</label>
+        <img id="coverPreview" class="cover-preview empty" alt="cover" src="">
+        <div style="height:8px"></div>
+        <input type="file" id="cover" accept="image/*">
+      </div>
+      <div>
+        <label>Release title</label>
+        <input type="text" id="title" placeholder="OK Computer">
+        <div style="height:10px"></div>
+        <label>Album artist</label>
+        <input type="text" id="artist" placeholder="Radiohead">
+        <div class="checkbox">
+          <input type="checkbox" id="compilation">
+          <label for="compilation" style="margin:0;color:var(--text)">Compilation (different artist per track)</label>
+        </div>
+      </div>
+      <div style="flex:0 1 120px">
+        <label>Year</label>
+        <input type="number" id="year" placeholder="1997" min="1900" max="2100">
+      </div>
+    </div>
+
+    <label>Audio files</label>
+    <div class="drop" id="drop">
+      Drop MP3 files here, or click to choose
+      <input type="file" id="files" accept="audio/*,.mp3" multiple hidden>
+    </div>
+    <ul class="files" id="filelist"></ul>
+
+    <div style="margin-top:16px; display:flex; align-items:center; gap:12px">
+      <button id="upload">Upload release</button>
+      <span class="hint" id="uploadstate"></span>
+    </div>
+
+    <div id="log"></div>
+  </section>
+
+  <section>
+    <h2>Library <span class="hint" id="libcount"></span></h2>
+    <div class="grid" id="library"></div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = 'https://0xpuh0b7ri.execute-api.ca-central-1.amazonaws.com';
+const keyInput = document.getElementById('key');
+const logEl = document.getElementById('log');
+const toastEl = document.getElementById('toast');
+
+keyInput.value = localStorage.getItem('paulifyAdminKey') || '';
+document.getElementById('savekey').onclick = () => {
+  localStorage.setItem('paulifyAdminKey', keyInput.value.trim());
+  toast('key saved locally');
+};
+
+function adminKey() {
+  const value = keyInput.value.trim();
+  if (!value) throw new Error('enter the admin key first');
+  localStorage.setItem('paulifyAdminKey', value);
+  return value;
+}
+
+function log(msg) {
+  const time = new Date().toTimeString().slice(0, 8);
+  logEl.textContent = time + '  ' + msg + '\n' + logEl.textContent;
+}
+
+let toastTimer = null;
+function toast(msg, isError) {
+  toastEl.textContent = msg;
+  toastEl.className = 'toast show' + (isError ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toastEl.className = 'toast'; }, 4000);
+}
+
+function slug(value) {
+  return (value || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'release';
+}
+
+function titleFromFilename(name) {
+  return name
+    .replace(/\.[^.]+$/, '')
+    .replace(/^\d+[\s._-]*/, '')
+    .replace(/[_-]+/g, ' ')
+    .trim() || name;
+}
+
+function readDuration(file) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const audio = new Audio();
+    let settled = false;
+    const finish = (ms) => {
+      if (settled) return;
+      settled = true;
+      URL.revokeObjectURL(url);
+      resolve(ms);
+    };
+    audio.preload = 'metadata';
+    audio.onloadedmetadata = () => finish(isFinite(audio.duration) ? Math.round(audio.duration * 1000) : 0);
+    audio.onerror = () => finish(0);
+    audio.src = url;
+    setTimeout(() => finish(0), 8000);
+  });
+}
+
+// ---- file queue -------------------------------------------------------
+
+let queue = [];
+
+const dropEl = document.getElementById('drop');
+const filesInput = document.getElementById('files');
+const listEl = document.getElementById('filelist');
+
+dropEl.onclick = () => filesInput.click();
+filesInput.onchange = () => addFiles(filesInput.files);
+
+['dragenter', 'dragover'].forEach((event) => dropEl.addEventListener(event, (e) => {
+  e.preventDefault();
+  dropEl.classList.add('over');
+}));
+['dragleave', 'drop'].forEach((event) => dropEl.addEventListener(event, (e) => {
+  e.preventDefault();
+  dropEl.classList.remove('over');
+}));
+dropEl.addEventListener('drop', (e) => {
+  if (e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files);
+});
+
+async function addFiles(fileList) {
+  const incoming = Array.from(fileList || []).filter((file) => /audio\//.test(file.type) || /\.mp3$/i.test(file.name));
+  if (!incoming.length) return;
+
+  for (const file of incoming) {
+    const entry = {
+      file,
+      title: titleFromFilename(file.name),
+      artist: '',
+      durationMs: 0,
+      status: 'reading',
+    };
+    queue.push(entry);
+  }
+  renderQueue();
+
+  for (const entry of queue) {
+    if (entry.durationMs || entry.status !== 'reading') continue;
+    entry.durationMs = await readDuration(entry.file);
+    entry.status = entry.durationMs ? 'ready' : 'no duration';
+  }
+  renderQueue();
+  log(incoming.length + ' file(s) added');
+}
+
+function move(index, delta) {
+  const target = index + delta;
+  if (target < 0 || target >= queue.length) return;
+  const [entry] = queue.splice(index, 1);
+  queue.splice(target, 0, entry);
+  renderQueue();
+}
+
+function renderQueue() {
+  listEl.innerHTML = '';
+  queue.forEach((entry, index) => {
+    const li = document.createElement('li');
+    if (entry.status === 'done') li.className = 'done';
+    if (entry.status === 'failed') li.className = 'err';
+
+    const pos = document.createElement('span');
+    pos.textContent = (index + 1) + '.';
+    pos.style.color = '#666';
+    pos.style.minWidth = '22px';
+
+    const title = document.createElement('input');
+    title.type = 'text';
+    title.value = entry.title;
+    title.style.flex = '1';
+    title.oninput = () => { entry.title = title.value; };
+
+    const artist = document.createElement('input');
+    artist.type = 'text';
+    artist.placeholder = document.getElementById('artist').value || 'artist';
+    artist.value = entry.artist;
+    artist.style.flex = '1';
+    artist.oninput = () => { entry.artist = artist.value; };
+
+    const dur = document.createElement('span');
+    dur.className = 'dur';
+    dur.textContent = formatMs(entry.durationMs);
+
+    const state = document.createElement('span');
+    state.className = 'state';
+    state.textContent = entry.status;
+
+    const up = document.createElement('button');
+    up.className = 'arrow';
+    up.textContent = '↑';
+    up.onclick = () => move(index, -1);
+
+    const down = document.createElement('button');
+    down.className = 'arrow';
+    down.textContent = '↓';
+    down.onclick = () => move(index, 1);
+
+    li.appendChild(pos);
+    li.appendChild(title);
+    li.appendChild(artist);
+    li.appendChild(dur);
+    li.appendChild(state);
+    li.appendChild(up);
+    li.appendChild(down);
+    listEl.appendChild(li);
+  });
+}
+
+function formatMs(ms) {
+  if (!ms) return '-';
+  const total = Math.round(ms / 1000);
+  return Math.floor(total / 60) + ':' + String(total % 60).padStart(2, '0');
+}
+
+// ---- cover ------------------------------------------------------------
+
+let coverFile = null;
+const coverPreview = document.getElementById('coverPreview');
+document.getElementById('cover').onchange = (e) => {
+  coverFile = (e.target.files || [])[0] || null;
+  if (!coverFile) return;
+  const url = URL.createObjectURL(coverFile);
+  coverPreview.src = url;
+  coverPreview.classList.remove('empty');
+};
+
+// ---- upload -----------------------------------------------------------
+
+async function presign(body) {
+  const response = await fetch(API + '/admin/uploads', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-admin-key': adminKey() },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error('presign failed: HTTP ' + response.status + ' ' + (await response.text()).slice(0, 120));
+  return response.json();
+}
+
+function putFile(url, file, contentType, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url, true);
+    xhr.setRequestHeader('Content-Type', contentType);
+    xhr.upload.onprogress = (e) => {
+      if (onProgress && e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300)
+      ? resolve()
+      : reject(new Error('upload HTTP ' + xhr.status + ' ' + xhr.responseText.slice(0, 120)));
+    xhr.onerror = () => reject(new Error('upload network error'));
+    xhr.send(file);
+  });
+}
+
+const uploadButton = document.getElementById('upload');
+const uploadState = document.getElementById('uploadstate');
+
+uploadButton.onclick = async () => {
+  const titleInput = document.getElementById('title');
+  const artistInput = document.getElementById('artist');
+  const yearInput = document.getElementById('year');
+  const compilation = document.getElementById('compilation').checked;
+
+  try {
+    adminKey();
+    if (!titleInput.value.trim()) throw new Error('release title is required');
+    if (!artistInput.value.trim()) throw new Error('album artist is required');
+    if (!queue.length) throw new Error('add at least one audio file');
+
+    uploadButton.disabled = true;
+    uploadState.textContent = 'starting';
+
+    let coverKey;
+    if (coverFile) {
+      uploadState.textContent = 'uploading cover';
+      const contentType = coverFile.type || 'image/jpeg';
+      const target = await presign({ kind: 'cover', filename: coverFile.name, contentType });
+      await putFile(target.url, coverFile, contentType);
+      coverKey = target.key;
+      log('cover uploaded: ' + coverKey);
+    }
+
+    const prefix = slug(titleInput.value);
+    const tracks = [];
+
+    for (let i = 0; i < queue.length; i++) {
+      const entry = queue[i];
+      const contentType = entry.file.type || 'audio/mpeg';
+      const trackArtist = (entry.artist || '').trim() || artistInput.value.trim();
+
+      uploadState.textContent = 'uploading ' + (i + 1) + '/' + queue.length;
+      entry.status = 'uploading';
+      renderQueue();
+
+      try {
+        const target = await presign({
+          kind: 'audio',
+          filename: entry.file.name,
+          contentType,
+          prefix,
+        });
+        await putFile(target.url, entry.file, contentType, (percent) => {
+          uploadState.textContent = 'uploading ' + (i + 1) + '/' + queue.length + ' (' + percent + '%)';
+        });
+
+        const durationMs = entry.durationMs || 0;
+        const bitrate = durationMs ? Math.round((entry.file.size * 8) / (durationMs / 1000) / 1000) : 128;
+
+        tracks.push({
+          title: entry.title.trim() || titleFromFilename(entry.file.name),
+          artist: trackArtist,
+          s3Key: target.key,
+          durationMs,
+          bitrate,
+          sizeBytes: entry.file.size,
+        });
+        entry.status = 'done';
+      } catch (fileError) {
+        entry.status = 'failed';
+        log('failed ' + entry.file.name + ': ' + fileError.message);
+      }
+      renderQueue();
+    }
+
+    if (!tracks.length) throw new Error('no files uploaded successfully');
+
+    uploadState.textContent = 'writing catalogue';
+    const response = await fetch(API + '/admin/albums', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-admin-key': adminKey() },
+      body: JSON.stringify({
+        title: titleInput.value.trim(),
+        artist: artistInput.value.trim(),
+        year: yearInput.value ? Number(yearInput.value) : undefined,
+        compilation,
+        coverKey,
+        tracks,
+      }),
+    });
+
+    if (!response.ok) throw new Error('catalogue write failed: HTTP ' + response.status + ' ' + (await response.text()).slice(0, 160));
+    const result = await response.json();
+
+    log('created release ' + result.album.id + ' with ' + result.tracks.length + ' track(s)');
+    toast('Added ' + result.album.title + ' (' + result.tracks.length + ' tracks)');
+
+    queue = [];
+    coverFile = null;
+    coverPreview.src = '';
+    coverPreview.classList.add('empty');
+    document.getElementById('cover').value = '';
+    titleInput.value = '';
+    artistInput.value = '';
+    yearInput.value = '';
+    document.getElementById('compilation').checked = false;
+    renderQueue();
+    loadLibrary();
+  } catch (error) {
+    log('ERROR ' + error.message);
+    toast(error.message, true);
+  } finally {
+    uploadButton.disabled = false;
+    uploadState.textContent = '';
+  }
+};
+
+// ---- library ----------------------------------------------------------
+
+async function loadLibrary() {
+  const grid = document.getElementById('library');
+  try {
+    const response = await fetch(API + '/albums');
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const body = await response.json();
+    document.getElementById('libcount').textContent = body.count ? '(' + body.count + ')' : '';
+
+    grid.innerHTML = '';
+    if (!body.albums.length) {
+      grid.innerHTML = '<div class="hint">No releases yet. Upload one above.</div>';
+      return;
+    }
+
+    body.albums.forEach((album) => {
+      const card = document.createElement('div');
+      card.className = 'card';
+
+      if (album.coverUrl) {
+        const img = document.createElement('img');
+        img.src = album.coverUrl;
+        img.alt = album.title;
+        card.appendChild(img);
+      } else {
+        const box = document.createElement('div');
+        box.className = 'placeholder';
+        card.appendChild(box);
+      }
+
+      const title = document.createElement('div');
+      title.className = 't';
+      title.textContent = album.title;
+      if (album.compilation) {
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.textContent = 'comp';
+        title.appendChild(badge);
+      }
+
+      const artist = document.createElement('div');
+      artist.className = 'a';
+      artist.textContent = album.artist + ' · ' + album.trackCount + ' tracks';
+
+      card.appendChild(title);
+      card.appendChild(artist);
+      grid.appendChild(card);
+    });
+  } catch (error) {
+    grid.innerHTML = '<div class="hint">Could not load library: ' + error.message + '</div>';
+  }
+}
+
+loadLibrary();
+log('panel ready. API: ' + API);
+</script>
+</body>
+</html>

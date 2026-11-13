@@ -29,6 +29,29 @@ Deployed to AWS and verified end to end on 2026-11-12, in `ca-central-1`.
 The client is not written yet.
 Next step is proving playback in the BlackBerry browser before packaging, per `docs/plan.md`.
 
+## Adding music
+
+Open the admin panel from the same server that hosts the player:
+
+```
+http://<mac-lan-ip>:8080/admin.html
+```
+
+Paste the admin key once (it is stored in the browser's local storage). The key lives in Secrets Manager:
+
+```bash
+aws secretsmanager get-secret-value \
+  --secret-id paulify/admin-key \
+  --query SecretString --output text
+```
+
+The panel takes drag-and-dropped MP3 files, a cover image, and a release title and artist.
+Ticking **Compilation** keeps a per-track artist, which is how a various-artists release differs from a single-artist album.
+Files go straight from the browser to S3 with a presigned PUT, so audio never passes through Lambda.
+
+Covers are served unsigned through a `covers/*` CloudFront behaviour, because they are loaded by `<img>` and are not sensitive.
+Audio stays behind a signed URL.
+
 ## Deploy
 
 ```bash

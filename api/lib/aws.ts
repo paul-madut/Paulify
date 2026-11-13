@@ -36,4 +36,7 @@ export const env = {
   get privateKeySecretArn(): string {
     return process.env.PRIVATE_KEY_SECRET_ARN ?? '';
   },
+  get adminKeySecretArn(): string {
+    return process.env.ADMIN_KEY_SECRET_ARN ?? '';
+  },
 };

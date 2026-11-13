@@ -46,5 +46,8 @@ export const handler = async (event: ListTracksEvent) => {
   const result = await ddb.send(command);
   const items = (result.Items ?? []) as TrackItem[];
 
-  return json(200, { tracks: items.map(toTrack), count: items.length });
+  return json(200, {
+    tracks: items.map((item) => toTrack(item, env.distributionDomain)),
+    count: items.length,
+  });
 };

@@ -33,6 +33,16 @@ export class PaulifyStack extends cdk.Stack {
       encryption: s3.BucketEncryption.S3_MANAGED,
       versioned: true,
       enforceSSL: true,
+      // The admin panel uploads straight from the browser with a presigned PUT,
+      // which the browser treats as a cross-origin request.
+      cors: [
+        {
+          allowedMethods: [s3.HttpMethods.PUT, s3.HttpMethods.GET, s3.HttpMethods.HEAD],
+          allowedOrigins: ['*'],
+          allowedHeaders: ['*'],
+          maxAge: 3000,
+        },
+      ],
       lifecycleRules: [
         {
           id: 'abort-incomplete-uploads',
@@ -71,12 +81,26 @@ export class PaulifyStack extends cdk.Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
+    // Releases, newest first.
+    table.addGlobalSecondaryIndex({
+      indexName: 'GSI3',
+      partitionKey: { name: 'gsi3pk', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'gsi3sk', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
     // ---------------------------------------------------------------------
     // Signing key: private half in Secrets Manager, public half on the distribution.
     // ---------------------------------------------------------------------
     const signingSecret = new secretsmanager.Secret(this, 'SigningKey', {
       secretName: 'paulify/cloudfront-private-key',
       description: 'Private key for signing Paulify CloudFront playback URLs',
+    });
+
+    const adminSecret = new secretsmanager.Secret(this, 'AdminKey', {
+      secretName: 'paulify/admin-key',
+      description: 'Shared key for the Paulify admin endpoints',
+      generateSecretString: { excludePunctuation: true, passwordLength: 32 },
     });
 
     const publicKey = new cloudfront.PublicKey(this, 'SigningPublicKey', {
@@ -102,17 +126,43 @@ export class PaulifyStack extends cdk.Stack {
       cookieBehavior: cloudfront.CacheCookieBehavior.none(),
     });
 
+    // Cover art is not sensitive and is loaded by <img>, so it is deliberately
+    // unsigned. Audio stays behind a signed URL.
+    const coverCachePolicy = new cloudfront.CachePolicy(this, 'CoverCachePolicy', {
+      cachePolicyName: 'paulify-covers',
+      minTtl: Duration.seconds(0),
+      defaultTtl: Duration.days(7),
+      maxTtl: Duration.days(365),
+      enableAcceptEncodingGzip: true,
+      enableAcceptEncodingBrotli: true,
+      headerBehavior: cloudfront.CacheHeaderBehavior.none(),
+      queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
+      cookieBehavior: cloudfront.CacheCookieBehavior.none(),
+    });
+
+    const audioOrigin = origins.S3BucketOrigin.withOriginAccessControl(bucket);
+
     const distribution = new cloudfront.Distribution(this, 'AudioCdn', {
       comment: 'Paulify audio',
       priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
       defaultBehavior: {
-        origin: origins.S3BucketOrigin.withOriginAccessControl(bucket),
+        origin: audioOrigin,
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
         cachedMethods: cloudfront.CachedMethods.CACHE_GET_HEAD,
         cachePolicy: audioCachePolicy,
         trustedKeyGroups: [keyGroup],
         compress: false,
+      },
+      additionalBehaviors: {
+        'covers/*': {
+          origin: audioOrigin,
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
+          cachedMethods: cloudfront.CachedMethods.CACHE_GET_HEAD,
+          cachePolicy: coverCachePolicy,
+          compress: true,
+        },
       },
     });
 
@@ -162,9 +212,53 @@ export class PaulifyStack extends cdk.Stack {
     bucket.grantRead(playTrack, 'audio/*');
     signingSecret.grantRead(playTrack);
 
+    const catalogApi = new NodejsFunction(this, 'CatalogApi', {
+      entry: join(__dirname, '..', 'api', 'handlers', 'catalog.ts'),
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_22_X,
+      timeout: Duration.seconds(10),
+      memorySize: 256,
+      environment: { TABLE_NAME: table.tableName, DISTRIBUTION_DOMAIN: distribution.distributionDomainName },
+      bundling,
+    });
+    table.grantReadData(catalogApi);
+
+    const admin = new NodejsFunction(this, 'Admin', {
+      entry: join(__dirname, '..', 'api', 'handlers', 'admin.ts'),
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_22_X,
+      timeout: Duration.seconds(20),
+      memorySize: 512,
+      environment: {
+        TABLE_NAME: table.tableName,
+        BUCKET_NAME: bucket.bucketName,
+        DISTRIBUTION_DOMAIN: distribution.distributionDomainName,
+        ADMIN_KEY_SECRET_ARN: adminSecret.secretArn,
+      },
+      bundling,
+    });
+    table.grantReadWriteData(admin);
+    bucket.grantRead(admin, 'audio/*');
+    bucket.grantRead(admin, 'covers/*');
+    // The presigned PUT carries this role's identity, so the role needs the write.
+    bucket.grantPut(admin, 'audio/*');
+    bucket.grantPut(admin, 'covers/*');
+    adminSecret.grantRead(admin);
+
     const api = new apigwv2.HttpApi(this, 'HttpApi', {
       apiName: 'paulify-api',
       createDefaultStage: false,
+      // The admin panel posts JSON with a custom header, which always preflights.
+      corsPreflight: {
+        allowOrigins: ['*'],
+        allowHeaders: ['content-type', 'x-admin-key'],
+        allowMethods: [
+          apigwv2.CorsHttpMethod.GET,
+          apigwv2.CorsHttpMethod.POST,
+          apigwv2.CorsHttpMethod.OPTIONS,
+        ],
+        maxAge: Duration.hours(1),
+      },
     });
 
     // One stage with explicit throttling, so a misbehaving client cannot hammer
@@ -186,6 +280,30 @@ export class PaulifyStack extends cdk.Stack {
       path: '/tracks/{id}/play',
       methods: [apigwv2.HttpMethod.GET],
       integration: new HttpLambdaIntegration('PlayTrackIntegration', playTrack),
+    });
+
+    const catalogIntegration = new HttpLambdaIntegration('CatalogIntegration', catalogApi);
+    api.addRoutes({
+      path: '/albums',
+      methods: [apigwv2.HttpMethod.GET],
+      integration: catalogIntegration,
+    });
+    api.addRoutes({
+      path: '/albums/{id}',
+      methods: [apigwv2.HttpMethod.GET],
+      integration: catalogIntegration,
+    });
+
+    const adminIntegration = new HttpLambdaIntegration('AdminIntegration', admin);
+    api.addRoutes({
+      path: '/admin/uploads',
+      methods: [apigwv2.HttpMethod.POST],
+      integration: adminIntegration,
+    });
+    api.addRoutes({
+      path: '/admin/albums',
+      methods: [apigwv2.HttpMethod.POST],
+      integration: adminIntegration,
     });
 
     // ---------------------------------------------------------------------
@@ -252,6 +370,7 @@ export class PaulifyStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'TableName', { value: table.tableName });
     new cdk.CfnOutput(this, 'SigningSecretArn', { value: signingSecret.secretArn });
     new cdk.CfnOutput(this, 'SigningPublicKeyId', { value: publicKey.publicKeyId });
+    new cdk.CfnOutput(this, 'AdminKeySecretArn', { value: adminSecret.secretArn });
   }
 
   /**
