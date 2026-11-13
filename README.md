@@ -72,6 +72,19 @@ Optional alarm email:
 npx cdk deploy -c alarmEmail=you@example.com
 ```
 
+### Adding an index to an existing table
+
+`cdk deploy` reports success before a new global secondary index is readable.
+DynamoDB answers `Cannot read from backfilling global secondary index` for several minutes after CloudFormation returns, so the catalogue endpoint 500s in that window.
+Check before assuming the deploy is broken:
+
+```bash
+aws dynamodb describe-table --table-name paulify-catalog \
+  --query "Table.GlobalSecondaryIndexes[?IndexName=='GSI3'].IndexStatus" --output text
+```
+
+Wait for `ACTIVE`. On the first deploy of GSI3 this took about seven minutes with a single row in the table.
+
 ## Architecture
 
 ```
