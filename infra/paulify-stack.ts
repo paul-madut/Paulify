@@ -14,6 +14,7 @@ import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
@@ -307,6 +308,40 @@ export class PaulifyStack extends cdk.Stack {
     });
 
     // ---------------------------------------------------------------------
+    // Web client: static files in their own bucket, served unsigned over HTTPS.
+    // Separate from the audio distribution so one bad cache rule cannot expose
+    // audio, and so the player has a stable public URL.
+    // ---------------------------------------------------------------------
+    const webBucket = new s3.Bucket(this, 'WebBucket', {
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+
+    const webDistribution = new cloudfront.Distribution(this, 'WebCdn', {
+      comment: 'Paulify web client',
+      priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
+      defaultRootObject: 'index.html',
+      defaultBehavior: {
+        origin: origins.S3BucketOrigin.withOriginAccessControl(webBucket),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
+        cachedMethods: cloudfront.CachedMethods.CACHE_GET_HEAD,
+        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+        compress: true,
+      },
+    });
+
+    new s3deploy.BucketDeployment(this, 'WebDeploy', {
+      sources: [s3deploy.Source.asset(join(__dirname, '..', 'client', 'web'))],
+      destinationBucket: webBucket,
+      distribution: webDistribution,
+      distributionPaths: ['/*'],
+      prune: true,
+    });
+
+    // ---------------------------------------------------------------------
     // Operations
     // ---------------------------------------------------------------------
     const alarms: cloudwatch.Alarm[] = [
@@ -371,6 +406,9 @@ export class PaulifyStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'SigningSecretArn', { value: signingSecret.secretArn });
     new cdk.CfnOutput(this, 'SigningPublicKeyId', { value: publicKey.publicKeyId });
     new cdk.CfnOutput(this, 'AdminKeySecretArn', { value: adminSecret.secretArn });
+    new cdk.CfnOutput(this, 'WebUrl', {
+      value: `https://${webDistribution.distributionDomainName}`,
+    });
   }
 
   /**

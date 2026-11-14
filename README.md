@@ -12,6 +12,19 @@ Whatever plays on it has to be progressive audio fetched over plain HTTP/1.1 wit
 The client is a sideloaded app.
 The backend is where the interesting work sits: a private object store, a CDN that signs every playback URL, and a catalog that returns fast on a device that cannot afford a slow first byte.
 
+## Live
+
+| What | URL |
+|---|---|
+| Player | https://d30qg976fd0749.cloudfront.net |
+| Admin panel | https://d30qg976fd0749.cloudfront.net/admin.html |
+| API | https://0xpuh0b7ri.execute-api.ca-central-1.amazonaws.com |
+
+The site is static files in its own bucket behind its own CloudFront distribution, deployed by `cdk deploy`.
+HTTP redirects to HTTPS.
+
+The admin page is published too. It renders without a key but every write is rejected without one, so the secret is the boundary rather than the URL.
+
 ## Status
 
 Deployed to AWS and verified end to end on 2026-11-12, in `ca-central-1`.
